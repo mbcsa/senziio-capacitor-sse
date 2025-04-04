@@ -1,37 +1,63 @@
-import { WebPlugin } from '@capacitor/core';
-import type { SenziioSSEPlugin, SSEEvent } from './definitions';
+import { PluginListenerHandle, WebPlugin } from '@capacitor/core';
+import {
+  SenziioSSEPlugin,
+  EventType,
+  EventDataMap,
+  eventNames
+} from './definitions';
 
 export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
   private eventSource: EventSource | null = null;
-  
-  // Usa el tipo correcto para listeners heredado de WebPlugin
-  private sseListeners: ((event: SSEEvent) => void)[] = [];
+  listeners: {
+    [K in EventType]?: ((event: any) => void)[] // Cambiamos el tipo a any
+  } = {};
 
   async connect(options: { url: string }): Promise<void> {
-    return new Promise((resolve, reject) => {
+    this.eventSource = new EventSource(options.url);
+
+    this.eventSource.onmessage = (event) => {
       try {
-        this.eventSource = new EventSource(options.url);
-
-        this.eventSource.onmessage = (event) => {
-          const sseEvent: SSEEvent = {
-            type: 'message',
-            data: event.data
-          };
-          
-          // Notificar a los listeners registrados
-          this.sseListeners.forEach(listener => listener(sseEvent));
-        };
-
-        this.eventSource.onerror = (error) => {
-          reject(new Error(`SSE Error: ${error}`));
-          this.disconnect();
-        };
-
-        resolve();
+        const parsedData = JSON.parse(event.data);
+        this.handleEvent(parsedData.type as EventType, parsedData.data);
       } catch (error) {
-        reject(new Error(`Failed to connect: ${error}`));
+        console.error('Error parsing event:', error);
       }
-    });
+    };
+
+    this.eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
+      this.disconnect();
+    };
+  }
+
+  private handleEvent<T extends EventType>(type: T, data: EventDataMap[T]) {
+    const eventListeners = this.listeners[type] as ((event: EventDataMap[T]) => void)[] | undefined;
+    if (eventListeners) {
+      eventListeners.forEach(listener => listener(data));
+    }
+  }
+
+  async addListener<T extends EventType>(
+    eventName: T,
+    listenerFunc: (event: EventDataMap[T]) => void
+  ): Promise<PluginListenerHandle> {
+    if (!eventNames.includes(eventName)) {
+      throw new Error(`Evento no válido: ${eventName}`);
+    }
+
+    if (!this.listeners[eventName]) {
+      this.listeners[eventName] = [];
+    }
+
+    (this.listeners[eventName] as ((event: EventDataMap[T]) => void)[]).push(listenerFunc);
+
+    return {
+      remove: async () => {
+        this.listeners[eventName] = this.listeners[eventName]?.filter(
+          listener => listener !== listenerFunc
+        );
+      }
+    };
   }
 
   async disconnect(): Promise<void> {
@@ -39,30 +65,14 @@ export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
       this.eventSource.close();
       this.eventSource = null;
     }
-    this.sseListeners = [];
+    this.listeners = {};
   }
 
-  async addListener(
-    eventName: 'sseEvent',  // <-- Se declara pero no se usa
-    listenerFunc: (event: SSEEvent) => void,
-  ) {
-    // Verifica el nombre del evento (elimina TS6133 y agrega seguridad)
-    if (eventName !== 'sseEvent') {
-      throw new Error('Solo se admite el evento "sseEvent"');
+  async removeAllListeners(eventName?: EventType): Promise<void> {
+    if (eventName) {
+      this.listeners[eventName] = [];
+    } else {
+      this.listeners = {};
     }
-  
-    this.sseListeners.push(listenerFunc);
-    
-    return {
-      remove: async () => {
-        this.sseListeners = this.sseListeners.filter(
-          listener => listener !== listenerFunc
-        );
-      }
-    };
-  }
-
-  async removeAllListeners() {
-    this.sseListeners = [];
   }
 }
