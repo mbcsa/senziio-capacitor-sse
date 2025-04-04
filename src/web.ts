@@ -1,4 +1,5 @@
-import { PluginListenerHandle, WebPlugin } from '@capacitor/core';
+// web.ts
+import { PluginListenerHandle, WebPlugin, ListenerCallback } from '@capacitor/core';
 import {
   SenziioSSEPlugin,
   EventType,
@@ -8,9 +9,7 @@ import {
 
 export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
   private eventSource: EventSource | null = null;
-  listeners: {
-    [K in EventType]?: ((event: any) => void)[] // Cambiamos el tipo a any
-  } = {};
+  listeners: { [eventName: string]: ListenerCallback[] } = {}; // Ajustamos la definición
 
   async connect(options: { url: string }): Promise<void> {
     this.eventSource = new EventSource(options.url);
@@ -45,16 +44,20 @@ export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
       throw new Error(`Evento no válido: ${eventName}`);
     }
 
+    const typedListenerFunc: ListenerCallback = (data: any) => {
+      listenerFunc(data as EventDataMap[T]);
+    };
+
     if (!this.listeners[eventName]) {
       this.listeners[eventName] = [];
     }
 
-    (this.listeners[eventName] as ((event: EventDataMap[T]) => void)[]).push(listenerFunc);
+    this.listeners[eventName].push(typedListenerFunc);
 
     return {
       remove: async () => {
         this.listeners[eventName] = this.listeners[eventName]?.filter(
-          listener => listener !== listenerFunc
+          listener => listener !== typedListenerFunc
         );
       }
     };
@@ -70,7 +73,7 @@ export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
 
   async removeAllListeners(eventName?: EventType): Promise<void> {
     if (eventName) {
-      this.listeners[eventName] = [];
+      delete this.listeners[eventName];
     } else {
       this.listeners = {};
     }
