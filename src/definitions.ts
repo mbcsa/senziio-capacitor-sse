@@ -1,7 +1,7 @@
 import type { PluginListenerHandle } from '@capacitor/core';
 
 // Definir tipos de eventos y sus estructuras de datos
-export interface CommunicationStatusEvent {
+export interface ComunicationStatusEvent {
   mqtt: {
     enable: boolean;
     host: string;
@@ -51,17 +51,23 @@ export interface ThermalImageCaptureEvent {
   rotate: number;
 }
 
+
 // Mapa de tipos de eventos
 export type EventType = 
-  | "CommunicationStatusEvent"
+  | "BeaconEvent"
+  | "ConnectedEvent"
+  | "ComunicationStatusEvent"
   | "IlluminanceReadEvent"
   | "SensorsReadEvent"
   | "PresenceChangeEvent"
-  | "ThermalImageCaptureEvent";
+  | "ThermalImageCaptureEvent"
+;
 
 // Lista de eventos permitidos
 export const eventNames: EventType[] = [
-  "CommunicationStatusEvent",
+  "BeaconEvent",
+  "ConnectedEvent",
+  "ComunicationStatusEvent",
   "IlluminanceReadEvent",
   "SensorsReadEvent",
   "PresenceChangeEvent",
@@ -85,9 +91,11 @@ export interface SenziioSSEPlugin {
 
 // Mapeo de tipos de eventos a sus datos
 export type EventDataMap = {
-  CommunicationStatusEvent: CommunicationStatusEvent;
+  ComunicationStatusEvent: ComunicationStatusEvent;
   IlluminanceReadEvent: IlluminanceReadEvent;
   SensorsReadEvent: SensorsReadEvent;
   PresenceChangeEvent: PresenceChangeEvent;
   ThermalImageCaptureEvent: ThermalImageCaptureEvent;
+  BeaconEvent: String;
+  ConnectedEvent: String;
 };

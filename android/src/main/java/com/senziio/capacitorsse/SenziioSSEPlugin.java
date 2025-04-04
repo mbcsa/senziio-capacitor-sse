@@ -36,7 +36,7 @@ public class SenziioSSEPlugin extends Plugin {
         EventSourceListener listener = new EventSourceListener() {
             @Override
             public void onEvent(EventSource eventSource, String id, String type, String data) {
-                Log.e("SSE_DEBUG", "Stream:", data);
+                Log.e("SSE_DEBUG", "Stream:" + data);
                 JSObject ret = new JSObject();
                 ret.put("type", type);
                 ret.put("data", data);
