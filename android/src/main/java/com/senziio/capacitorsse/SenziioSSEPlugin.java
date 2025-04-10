@@ -35,8 +35,14 @@ public class SenziioSSEPlugin extends Plugin {
 
         EventSourceListener listener = new EventSourceListener() {
             @Override
+            public void onOpen(EventSource eventSource, Response response) {
+                JSObject ret = new JSObject();
+                ret.put("status", "connected");
+                notifyListeners("connected", ret);
+            }
+
+            @Override
             public void onEvent(EventSource eventSource, String id, String type, String data) {
-                Log.e("SSE_DEBUG", "Stream:" + data);
                 JSObject ret = new JSObject();
                 ret.put("type", type);
                 ret.put("data", data);
@@ -45,16 +51,34 @@ public class SenziioSSEPlugin extends Plugin {
 
             @Override
             public void onFailure(EventSource eventSource, Throwable t, Response response) {
-                Log.e("SSE_DEBUG", "Error en SSE", t);
-                String errorMsg = "Error: ";
-                errorMsg += t != null ? t.getMessage() : 
-                        response != null ? "HTTP " + response.code() : "Desconocido";
-                
-                call.reject(errorMsg);
+                // Notificar error de conexión
+                JSObject errorObj = new JSObject();
+                errorObj.put("message", "Connection failed");
+                if (t != null) {
+                    errorObj.put("error", t.getMessage());
+                }
+                notifyListeners("connection_error", errorObj);
+
+                // Notificar desconexión
+                JSObject disconObj = new JSObject();
+                disconObj.put("status", "disconnected");
+                disconObj.put("reason", "error");
+                notifyListeners("disconnected", disconObj);
+
+                call.reject(t != null ? t.getMessage() : "Unknown error");
                 
                 if (eventSource != null) {
-                    eventSource.cancel(); // Cerrar conexión
+                    eventSource.cancel();
                 }
+            }
+
+            @Override
+            public void onClosed(EventSource eventSource) {
+                // Notificar desconexión limpia
+                JSObject disconObj = new JSObject();
+                disconObj.put("status", "disconnected");
+                disconObj.put("reason", "closed");
+                notifyListeners("disconnected", disconObj);
             }
         };
 
@@ -68,6 +92,12 @@ public class SenziioSSEPlugin extends Plugin {
     public void disconnect(PluginCall call) {
         if (eventSource != null) {
             eventSource.cancel();
+            
+            // Notificar desconexión manual
+            JSObject disconObj = new JSObject();
+            disconObj.put("status", "disconnected");
+            disconObj.put("reason", "manual");
+            notifyListeners("disconnected", disconObj);
         }
         call.resolve();
     }

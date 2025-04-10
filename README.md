@@ -206,11 +206,11 @@ Allows manipulation and formatting of text strings and determination and locatio
 
 #### EventType
 
-<code>"BeaconEvent" | "ConnectedEvent" | "<a href="#comunicationstatusevent">ComunicationStatusEvent</a>" | "<a href="#illuminancereadevent">IlluminanceReadEvent</a>" | "<a href="#sensorsreadevent">SensorsReadEvent</a>" | "<a href="#presencechangeevent">PresenceChangeEvent</a>" | "<a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>"</code>
+<code>"BeaconEvent" | "ConnectedEvent" | "<a href="#comunicationstatusevent">ComunicationStatusEvent</a>" | "<a href="#illuminancereadevent">IlluminanceReadEvent</a>" | "<a href="#sensorsreadevent">SensorsReadEvent</a>" | "<a href="#presencechangeevent">PresenceChangeEvent</a>" | "<a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>" | "connected" | "disconnected" | "connection_error" | "error"</code>
 
 
 #### EventDataMap
 
-<code>{ <a href="#comunicationstatusevent">ComunicationStatusEvent</a>: <a href="#comunicationstatusevent">ComunicationStatusEvent</a>; <a href="#illuminancereadevent">IlluminanceReadEvent</a>: <a href="#illuminancereadevent">IlluminanceReadEvent</a>; <a href="#sensorsreadevent">SensorsReadEvent</a>: <a href="#sensorsreadevent">SensorsReadEvent</a>; <a href="#presencechangeevent">PresenceChangeEvent</a>: <a href="#presencechangeevent">PresenceChangeEvent</a>; <a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>: <a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>; BeaconEvent: <a href="#string">String</a>; ConnectedEvent: <a href="#string">String</a>; }</code>
+<code>{ <a href="#comunicationstatusevent">ComunicationStatusEvent</a>: <a href="#comunicationstatusevent">ComunicationStatusEvent</a>; <a href="#illuminancereadevent">IlluminanceReadEvent</a>: <a href="#illuminancereadevent">IlluminanceReadEvent</a>; <a href="#sensorsreadevent">SensorsReadEvent</a>: <a href="#sensorsreadevent">SensorsReadEvent</a>; <a href="#presencechangeevent">PresenceChangeEvent</a>: <a href="#presencechangeevent">PresenceChangeEvent</a>; <a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>: <a href="#thermalimagecaptureevent">ThermalImageCaptureEvent</a>; BeaconEvent: <a href="#string">String</a>; ConnectedEvent: <a href="#string">String</a>; connected: { status: string }; disconnected: { status: string; reason?: string }; connection_error: { message: string; error?: any }; error: any; }</code>
 
 </docgen-api>

@@ -61,6 +61,10 @@ export type EventType =
   | "SensorsReadEvent"
   | "PresenceChangeEvent"
   | "ThermalImageCaptureEvent"
+  | "connected"
+  | "disconnected"
+  | "connection_error"
+  | "error"
 ;
 
 // Lista de eventos permitidos
@@ -71,7 +75,11 @@ export const eventNames: EventType[] = [
   "IlluminanceReadEvent",
   "SensorsReadEvent",
   "PresenceChangeEvent",
-  "ThermalImageCaptureEvent"
+  "ThermalImageCaptureEvent",
+  "connected",
+  "disconnected",
+  "connection_error",
+  "error"
 ];
 
 // Tipo general para el plugin
@@ -98,4 +106,8 @@ export type EventDataMap = {
   ThermalImageCaptureEvent: ThermalImageCaptureEvent;
   BeaconEvent: String;
   ConnectedEvent: String;
+  connected: { status: string };
+  disconnected: { status: string; reason?: string };
+  connection_error: { message: string; error?: any };
+  error: any;
 };

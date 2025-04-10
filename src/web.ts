@@ -12,21 +12,44 @@ export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
   listeners: { [eventName: string]: ListenerCallback[] } = {}; // Ajustamos la definición
 
   async connect(options: { url: string }): Promise<void> {
-    this.eventSource = new EventSource(options.url);
+    try {
+      this.eventSource = new EventSource(options.url);
 
-    this.eventSource.onmessage = (event) => {
-      try {
-        const parsedData = JSON.parse(event.data);
-        this.handleEvent(parsedData.type as EventType, parsedData.data);
-      } catch (error) {
-        console.error('Error parsing event:', error);
-      }
-    };
+      this.eventSource.onmessage = (event) => {
+        try {
+          const parsedData = JSON.parse(event.data);
+          this.handleEvent(parsedData.type as EventType, parsedData.data);
+        } catch (error) {
+          console.error('Error parsing event:', error);
+          this.handleEvent('error', { message: 'Error parsing event data' });
+        }
+      };
 
-    this.eventSource.onerror = (error) => {
-      console.error('SSE Error:', error);
-      this.disconnect();
-    };
+      this.eventSource.onopen = () => {
+        this.handleEvent('connected', { status: 'connected' });
+      };
+
+      this.eventSource.onerror = (error) => {
+        console.error('SSE Error:', error);
+        this.handleEvent('connection_error', { 
+          message: 'SSE connection error',
+          error: error 
+        });
+        this.handleEvent('disconnected', { 
+          status: 'disconnected',
+          reason: 'error' 
+        });
+        this.disconnect();
+      };
+
+    } catch (error) {
+      console.error('Connection setup error:', error);
+      this.handleEvent('connection_error', { 
+        message: 'Failed to setup SSE connection',
+        error: error 
+      });
+      throw error;
+    }
   }
 
   private handleEvent<T extends EventType>(type: T, data: EventDataMap[T]) {
