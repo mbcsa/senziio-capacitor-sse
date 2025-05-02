@@ -13,7 +13,13 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
     private var receivedData: Data?
     private var lastEventID: String?
     private var retryTime = 3000
+    private var isManualDisconnect = false
+
+    private var retryDelay: Int = 3000 // 3 segundos iniciales
+    private let maxRetryDelay: Int = 30000 // 30 segundos máximo
     
+    private var heartbeatTimer: Timer?
+
     public var onOpen: EventHandler?
     public var onComplete: ErrorHandler?
     public var onMessage: MessageHandler?
@@ -30,6 +36,14 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
         self.configuration.allowsCellularAccess = true
         
         super.init()
+    }
+
+    private func startHeartbeatMonitor() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isConnected else { return }
+            print("❤️ Enviando heartbeat para mantener conexión activa")
+        }
     }
     
     public func addEventListener(_ event: String, handler: @escaping MessageHandler) {
@@ -57,14 +71,6 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
         self.task?.resume()
     }
     
-    public func disconnect() {
-        task?.cancel()
-        session?.finishTasksAndInvalidate()
-        session = nil
-        task = nil
-        isConnected = false
-    }
-
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         receivedData = (receivedData ?? Data()) + data
         
@@ -184,7 +190,7 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
         }
     }
     
-    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    /*public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         let statusCode = (task.response as? HTTPURLResponse)?.statusCode
         let shouldReconnect = error != nil && !(error! is URLError)
         
@@ -195,6 +201,26 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
                 self.connect()
             }
         }
+    }*/
+
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard !isManualDisconnect else {
+            isManualDisconnect = false
+            return
+        }
+        
+        let nsError = error as? NSError
+        let statusCode = (task.response as? HTTPURLResponse)?.statusCode
+        
+        // Reconectar para cualquier error excepto cancelación manual
+        if error != nil && nsError?.code != NSURLErrorCancelled {
+            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(retryDelay)) {
+                self.retryDelay = min(self.retryDelay * 2, self.maxRetryDelay) // Backoff exponencial
+                self.connect()
+            }
+        }
+        
+        onComplete?(statusCode, error != nil, error)
     }
 
     public func urlSession(_ session: URLSession, 
@@ -207,5 +233,13 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
             onOpen?()
         }
         completionHandler(.allow)
+    }
+
+    public func disconnect() {
+        isManualDisconnect = true
+        task?.cancel()
+        session?.invalidateAndCancel()
+        retryDelay = 3000 // Resetear delay para próxima conexión
+        isConnected = false
     }
 }

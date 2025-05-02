@@ -4,34 +4,48 @@ import Capacitor
 @objc(SenziioSSE)
 public class SenziioSSE: CAPPlugin {
     private var eventSource: EventSource?
+    private var lastEventId: String?
+    private var retryAttempts = 0
+    private let maxRetryAttempts = 10
     
     @objc func connect(_ call: CAPPluginCall) {
-        guard let url = call.getString("url") else {
+        guard let urlString = call.getString("url") else {
             call.reject("URL is required")
             return
         }
         
-        setupEventSource(url: url, call: call)
-    }
-    
-    private func setupEventSource(url: String, call: CAPPluginCall) {
-        guard let eventSourceUrl = URL(string: url) else {
-            call.reject("Invalid URL")
+        guard let url = URL(string: urlString) else {
+            call.reject("Invalid URL format")
             return
         }
         
-        var configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 30.0
-        configuration.timeoutIntervalForResource = 60.0
+        // Resetear intentos de reconexión
+        retryAttempts = 0
+        
+        // Configuración personalizada para SSE
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = Double.greatestFiniteMagnitude
+        configuration.timeoutIntervalForResource = Double.greatestFiniteMagnitude
         configuration.httpAdditionalHeaders = [
             "Accept": "text/event-stream",
-            "Cache-Control": "no-cache"
+            "Cache-Control": "no-cache",
+            "Last-Event-ID": lastEventId ?? ""
         ]
         
-        self.eventSource = EventSource(url: eventSourceUrl, configuration: configuration)
+        // Crear nueva instancia de EventSource
+        eventSource = EventSource(url: url, configuration: configuration)
         
-        self.eventSource?.onOpen = { [weak self] in
+        // Configurar manejadores de eventos
+        setupEventHandlers(call: call)
+        
+        // Iniciar conexión
+        eventSource?.connect()
+    }
+    
+    private func setupEventHandlers(call: CAPPluginCall) {
+        eventSource?.onOpen = { [weak self] in
             DispatchQueue.main.async {
+                self?.retryAttempts = 0
                 var ret = JSObject()
                 ret["status"] = "connected"
                 self?.notifyListeners("connected", data: ret)
@@ -39,61 +53,72 @@ public class SenziioSSE: CAPPlugin {
             }
         }
         
-        self.eventSource?.onMessage = { [weak self] (id, event, data) in
-            print("ID: \(id)")
-            print("EVENT: \(event)")
-            print("DATA: \(data)")
+        eventSource?.onMessage = { [weak self] (id, event, data) in
+            self?.lastEventId = id
             self?.handleSSEMessage(id: id, event: event, data: data)
         }
         
-        self.eventSource?.onComplete = { [weak self] statusCode, reconnect, error in
+        eventSource?.onComplete = { [weak self] statusCode, shouldReconnect, error in
             DispatchQueue.main.async {
-                // Connection error notification
+                guard let self = self else { return }
+                
+                // Notificar error
                 var errorObj = JSObject()
-                errorObj["message"] = "Connection failed"
-                if let error = error {
-                    errorObj["error"] = error.localizedDescription
-                }
-                self?.notifyListeners("connection_error", data: errorObj)
+                errorObj["message"] = "Connection error"
+                errorObj["statusCode"] = statusCode
+                errorObj["error"] = error?.localizedDescription
+                errorObj["willReconnect"] = shouldReconnect
+                self.notifyListeners("error", data: errorObj)
                 
-                // Disconnection notification
-                var disconObj = JSObject()
-                disconObj["status"] = "disconnected"
-                disconObj["reason"] = "error"
-                self?.notifyListeners("disconnected", data: disconObj)
-                
-                if !reconnect {
-                    call.reject(error?.localizedDescription ?? "Unknown error")
+                // Manejar reconexión automática
+                if shouldReconnect {
+                    self.attemptReconnection()
+                } else {
+                    var disconObj = JSObject()
+                    disconObj["status"] = "disconnected"
+                    disconObj["reason"] = "error"
+                    self.notifyListeners("disconnected", data: disconObj)
+                    call.reject(error?.localizedDescription ?? "Connection closed")
                 }
             }
         }
+    }
+    
+    private func attemptReconnection() {
+        retryAttempts += 1
         
-        self.eventSource?.connect()
+        guard retryAttempts <= maxRetryAttempts else {
+            print("⛔ Máximo de intentos de reconexión alcanzado")
+            return
+        }
+        
+        let delay = min(pow(2.0, Double(retryAttempts)) * 1000, 30000) // Backoff exponencial con máximo 30s
+        
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(Int(delay))) { [weak self] in
+            print("♻️ Intentando reconexión #\(self?.retryAttempts ?? 0)...")
+            self?.eventSource?.connect()
+        }
     }
     
     private func handleSSEMessage(id: String?, event: String?, data: String?) {
-        // 1. Validación estricta del evento
-        guard let eventName = event, !eventName.isEmpty else {
-            print("❌ Evento sin nombre recibido. Datos descartados.")
-            return
-        }
-
+        guard let eventName = event else { return }
+        
         DispatchQueue.main.async {
             var ret = JSObject()
             ret["id"] = id
             ret["type"] = eventName
             
-            // 2. Datos CRUDOS sin procesamiento
+            // Mantener data como string crudo
             if let data = data, !data.isEmpty {
-                ret["data"] = data // String exacto como vino del servidor
+                ret["data"] = data
             } else {
                 ret["data"] = NSNull()
             }
-
-            // 3. Notificación del evento específico
+            
+            // Notificar evento específico
             self.notifyListeners(eventName, data: ret)
             
-            // 4. (Opcional) Notificación genérica
+            // Notificar evento genérico
             var messageData = JSObject()
             messageData["event"] = eventName
             messageData["data"] = ret["data"]
@@ -104,7 +129,6 @@ public class SenziioSSE: CAPPlugin {
     @objc func disconnect(_ call: CAPPluginCall) {
         eventSource?.disconnect()
         
-        // Manual disconnection notification
         var disconObj = JSObject()
         disconObj["status"] = "disconnected"
         disconObj["reason"] = "manual"
