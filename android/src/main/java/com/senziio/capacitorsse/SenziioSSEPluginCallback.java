@@ -1,16 +1,24 @@
 package com.senziio.capacitorsse;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
 
+import java.io.IOException;
+import java.net.SocketException;
+
 import okhttp3.Response;
+import okhttp3.internal.http2.ErrorCode;
+import okhttp3.internal.http2.StreamResetException;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
 
 public class SenziioSSEPluginCallback extends EventSourceListener {
+    private static final String TAG = "SenziioSSEPluginCallback";
 
     private final PluginCall call;
 
@@ -37,14 +45,12 @@ public class SenziioSSEPluginCallback extends EventSourceListener {
 
     @Override
     public void onFailure(@NonNull EventSource eventSource, Throwable t, Response response) {
-        eventSource.cancel();
-
-        if (t instanceof Exception ex) {
-            call.reject(ex.getMessage(), ex);
+        if (t == null || t instanceof SocketException || (t instanceof StreamResetException ex && ex.errorCode == ErrorCode.CANCEL)) {
+            call.resolve(status("disconnected"));
             return;
         }
 
-        call.reject("Unknown error", error(t));
+        call.reject(t.getMessage(), t instanceof Exception ex ? ex : null);
     }
 
     @Override
