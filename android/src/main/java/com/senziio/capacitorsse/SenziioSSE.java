@@ -1,6 +1,8 @@
 package com.senziio.capacitorsse;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,7 +15,7 @@ import okhttp3.sse.EventSources;
 
 public class SenziioSSE {
 
-    private final Map<String, EventSource> connections = new HashMap<>();
+    public final Map<String, EventSource> connections = new HashMap<>();
 
     public SenziioSSE(Context context) {
         //
@@ -43,10 +45,20 @@ public class SenziioSSE {
             throw new RuntimeException(msg);
         }
 
-        EventSource connection = connections.get(connectionId);
-        assert connection != null;
-        connection.cancel();
-        connections.remove(connectionId);
-    }
+        EventSource connection = connections.remove(connectionId);
+        if (connection != null) {
+            try {
+                // Método más limpio para desconectar
+                connection.cancel();
 
+                // Pequeño delay para permitir procesamiento interno
+                // pero sin bloquear el hilo principal
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    // Limpieza adicional si es necesaria
+                }, 50);
+            } catch (Exception e) {
+                // Ignorar excepciones durante cancelación
+            }
+        }
+    }
 }

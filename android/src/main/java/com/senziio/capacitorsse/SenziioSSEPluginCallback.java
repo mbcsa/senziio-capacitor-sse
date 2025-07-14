@@ -6,7 +6,10 @@ import com.getcapacitor.Bridge;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
 
+import java.net.SocketException;
+
 import okhttp3.Response;
+import okhttp3.internal.http2.StreamResetException;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
 
@@ -27,30 +30,60 @@ public class SenziioSSEPluginCallback extends EventSourceListener {
 
     @Override
     public void onOpen(@NonNull EventSource eventSource, @NonNull Response response) {
-        call.resolve(status("connected"));
+        bridge.executeOnMainThread(() -> {
+            call.resolve(status("connected"));
+        });
     }
 
     @Override
     public void onEvent(@NonNull EventSource eventSource, String id, String type, @NonNull String data) {
-        call.resolve(message(type, data));
+        bridge.executeOnMainThread(() -> {
+            call.resolve(message(type, data));
+        });
     }
 
     @Override
     public void onFailure(@NonNull EventSource eventSource, Throwable t, Response response) {
-        eventSource.cancel();
-
-        if (t instanceof Exception ex) {
-            call.reject(ex.getMessage(), ex);
+        // Ignorar errores esperados durante desconexión
+        if (isExpectedDisconnectError(t)) {
+            bridge.executeOnMainThread(() -> {
+                call.resolve(status("disconnected"));
+                call.release(bridge);
+            });
             return;
         }
 
-        call.reject("Unknown error", error(t));
+        // Manejar otros errores normalmente
+        bridge.executeOnMainThread(() -> {
+            if (t instanceof Exception ex) {
+                call.reject(ex.getMessage(), ex);
+            } else {
+                call.reject("Unknown error", error(t));
+            }
+        });
+    }
+
+    private boolean isExpectedDisconnectError(Throwable t) {
+        // Error de stream cancelado
+        if (t instanceof StreamResetException) {
+            StreamResetException sre = (StreamResetException) t;
+            return "CANCEL".equals(sre.errorCode.toString());
+        }
+
+        // Error de socket cerrado
+        if (t instanceof SocketException) {
+            return "Socket closed".equals(t.getMessage());
+        }
+
+        return false;
     }
 
     @Override
     public void onClosed(@NonNull EventSource eventSource) {
-        call.resolve(status("disconnected"));
-        call.release(bridge);
+        bridge.executeOnMainThread(() -> {
+            call.resolve(status("disconnected"));
+            call.release(bridge);
+        });
     }
 
     @NonNull
