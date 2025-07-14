@@ -1,53 +1,52 @@
 package com.senziio.capacitorsse;
 
 import android.content.Context;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.Response;
 import okhttp3.sse.EventSource;
-import okhttp3.sse.EventSourceListener;
 import okhttp3.sse.EventSources;
 
 public class SenziioSSE {
-    private EventSource eventSource;
-    private final OkHttpClient client;
-    private final String url;
-    private final EventListener listener;
 
-    public interface EventListener {
-        void onEvent(String type, String data);
-        void onError(String error);
+    private final Map<String, EventSource> connections = new HashMap<>();
+
+    public SenziioSSE(Context context) {
+        //
     }
 
-    public SenziioSSE(Context context, String url, EventListener listener) {
-        this.client = new OkHttpClient();
-        this.url = url;
-        this.listener = listener;
-    }
-
-    public void connect() {
-        Request request = new Request.Builder()
-                .url(url)
+    public void connect(String url, SenziioSSEPluginCallback callback) {
+        // 1. Crear un cliente OkHttp con timeouts personalizados
+        OkHttpClient client = new OkHttpClient.Builder()
+                .readTimeout(0, TimeUnit.MILLISECONDS) // Timeout de lectura infinito para SSE
+                .connectTimeout(30, TimeUnit.SECONDS) // Timeout de conexión razonable
+                .writeTimeout(30, TimeUnit.SECONDS)   // Timeout de escritura razonable
                 .build();
 
-        EventSourceListener esListener = new EventSourceListener() {
-            @Override
-            public void onEvent(EventSource eventSource, String id, String type, String data) {
-                listener.onEvent(type, data);
-            }
+        Request request = new Request.Builder()
+                .url(url)
+                .header("Accept", "text/event-stream") // Es buena práctica añadir este header
+                .build();
 
-            @Override
-            public void onFailure(EventSource eventSource, Throwable t, Response response) {
-                listener.onError(t != null ? t.getMessage() : "Error desconocido");
-            }
-        };
+        EventSource eventSource = EventSources.createFactory(client).newEventSource(request, callback);
 
-        eventSource = EventSources.createFactory(client).newEventSource(request, esListener);
+        connections.put(callback.getId(), eventSource);
     }
 
-    public void disconnect() {
-        if (eventSource != null) {
-            eventSource.cancel();
+    public void disconnect(String connectionId) {
+        if (connectionId == null || !connections.containsKey(connectionId)) {
+            String msg = String.format("ID de conexión erróneo: %s", (connectionId == null ? "(null)" : connectionId));
+            throw new RuntimeException(msg);
         }
+
+        EventSource connection = connections.get(connectionId);
+        assert connection != null;
+        connection.cancel();
+        connections.remove(connectionId);
     }
+
 }
