@@ -5,6 +5,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import okhttp3.sse.EventSource;
+
 @CapacitorPlugin(name = "SenziioSSE")
 public class SenziioSSEPlugin extends Plugin {
 
@@ -36,15 +38,24 @@ public class SenziioSSEPlugin extends Plugin {
     public void disconnect(PluginCall call) {
         try {
             String connectionId = call.getString("connectionId");
-
             if (connectionId == null) {
                 throw new IllegalArgumentException("connectionId es requerido");
             }
 
             sse.disconnect(connectionId);
-            call.resolve();
+            // No llamar a call.resolve() aquí, dejar que el callback lo maneje
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        // Cancelar todas las conexiones al destruir el plugin
+        for (EventSource source : this.sse.connections.values()) {
+            source.cancel();
+        }
+        this.sse.connections.clear();
+        super.handleOnDestroy();
     }
 }
