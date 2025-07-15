@@ -71,16 +71,9 @@ public class SenziioSSEPluginCallback extends EventSourceListener {
 
     private boolean isExpectedDisconnectError(Throwable t) {
         // Error de stream cancelado
-        if (t instanceof StreamResetException) {
-            StreamResetException sre = (StreamResetException) t;
+        if (t instanceof StreamResetException ex) {
             return (ex.errorCode == ErrorCode.CANCEL);
         }
-
-        // Error de socket cerrado
-        if (t instanceof SocketException) {
-            return "Socket closed".equals(t.getMessage());
-        }
-
         return false;
     }
 
