@@ -19,9 +19,8 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
     private var task: URLSessionDataTask?
     private var receivedData: Data?
     private var lastEventID: String?
-    private var retryTime = 3000
-    private var isManualDisconnect = false
 
+    private var retryTime = 3000
     private var retryDelay: Int = 3000 // 3 segundos iniciales
     private let maxRetryDelay: Int = 30000 // 30 segundos máximo
     
@@ -45,21 +44,12 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
         
         super.init()
     }
-
-    private func startHeartbeatMonitor() {
-        heartbeatTimer?.invalidate()
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            guard let self = self, self.isConnected else { return }
-            print("❤️ Enviando heartbeat para mantener conexión activa")
-        }
-    }
     
     public func connect() {
         guard !isConnected else {
             return
         }
 
-        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         var request = URLRequest(url: url)
         request.timeoutInterval = configuration.timeoutIntervalForResource
         
@@ -72,59 +62,13 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
                 request.setValue(valueStr, forHTTPHeaderField: keyStr)
             }
         }
+
         isConnected = true
+
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         self.session = session
         self.task = session.dataTask(with: request)
         self.task?.resume()
-    }
-    
-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        receivedData = (receivedData ?? Data()) + data
-        
-        // Convertir a texto considerando posibles encoding issues
-        guard let stringData = String(data: receivedData!, encoding: .utf8) else {
-            receivedData = nil
-            return
-        }
-        
-        // Separar por líneas (manejando \r\n y \n)
-        let lines = stringData.components(separatedBy: .newlines)
-        var messages = [SSEMessage]()
-        var currentMessage = SSEMessage()
-        var buffer = [String]()
-        var previousLineEmpty = false
-        
-        for line in lines {
-            // Detectar mensaje completo (doble línea vacía)
-            if line.isEmpty {
-                if (previousLineEmpty) {
-                    currentMessage = SSEMessage()
-                    // Procesar todas las líneas acumuladas
-                    for bufferedLine in buffer {
-                        processLine(bufferedLine, into: &currentMessage)
-                    }
-                    // Solo agregar si tiene datos válidos
-                    if !currentMessage.isEmpty {
-                        messages.append(currentMessage)
-                    }
-                    buffer.removeAll()
-                }
-                previousLineEmpty = true
-                continue
-            } else {
-                // Acumular líneas no vacías
-                previousLineEmpty = false
-                buffer.append(line)
-            }
-        }
-        
-        // Manejar datos residuales (mensaje incompleto)
-        receivedData = buffer.isEmpty ? nil : buffer.joined(separator: "\n").data(using: .utf8)
-        
-        // Enviar todos los mensajes completos
-        for message in messages {
-            dispatchValidMessage(message)
-        }
     }
 
     private func processLine(_ line: String, into message: inout SSEMessage) {
@@ -204,24 +148,67 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
     }*/
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard !isManualDisconnect else {
-            isManualDisconnect = false
+        let nsError = error as? NSError
+
+        if (error == nil || nsError?.code == NSURLErrorCancelled) {
+            // Es cierre manual
+            listener.onClosed()
+        } else {
+            listener.onFailure(error!)
+        }
+
+        retryDelay = 3000 // Resetear delay para próxima conexión
+        isConnected = false
+        session.invalidateAndCancel()
+        receivedData = Data()
+    }
+
+    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        receivedData = (receivedData ?? Data()) + data
+        
+        // Convertir a texto considerando posibles encoding issues
+        guard let stringData = String(data: receivedData!, encoding: .utf8) else {
+            receivedData = nil
             return
         }
         
-        let nsError = error as? NSError
-        // let statusCode = (task.response as? HTTPURLResponse)?.statusCode
+        // Separar por líneas (manejando \r\n y \n)
+        let lines = stringData.components(separatedBy: .newlines)
+        var messages = [SSEMessage]()
+        var currentMessage = SSEMessage()
+        var buffer = [String]()
+        var previousLineEmpty = false
         
-        // Reconectar para cualquier error excepto cancelación manual
-        if error != nil && nsError?.code != NSURLErrorCancelled {
-            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(retryDelay)) {
-                self.retryDelay = min(self.retryDelay * 2, self.maxRetryDelay) // Backoff exponencial
-                self.connect()
+        for line in lines {
+            // Detectar mensaje completo (doble línea vacía)
+            if line.isEmpty {
+                if (previousLineEmpty) {
+                    currentMessage = SSEMessage()
+                    // Procesar todas las líneas acumuladas
+                    for bufferedLine in buffer {
+                        processLine(bufferedLine, into: &currentMessage)
+                    }
+                    // Solo agregar si tiene datos válidos
+                    if !currentMessage.isEmpty {
+                        messages.append(currentMessage)
+                    }
+                    buffer.removeAll()
+                }
+                previousLineEmpty = true
+                continue
+            } else {
+                // Acumular líneas no vacías
+                previousLineEmpty = false
+                buffer.append(line)
             }
-            listener.onFailure(error!)
-        } else {
-            // Es cierre manual
-            listener.onClosed()
+        }
+        
+        // Manejar datos residuales (mensaje incompleto)
+        receivedData = buffer.isEmpty ? nil : buffer.joined(separator: "\n").data(using: .utf8)
+        
+        // Enviar todos los mensajes completos
+        for message in messages {
+            dispatchValidMessage(message)
         }
     }
 
@@ -240,10 +227,6 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
     }
 
     public func disconnect() {
-        isManualDisconnect = true
         task?.cancel()
-        session?.invalidateAndCancel()
-        retryDelay = 3000 // Resetear delay para próxima conexión
-        isConnected = false
     }
 }

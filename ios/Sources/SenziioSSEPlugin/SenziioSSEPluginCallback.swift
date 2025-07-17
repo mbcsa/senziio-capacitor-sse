@@ -24,11 +24,16 @@ class SenziioSSEPluginCallback : EventSourceListener {
 
     func onFailure(_ error: Error) {
         call.reject(error.localizedDescription, nil, error)
+        release()
     }
 
     func onClosed() {
         call.resolve(status("disconnected"))
-        // No direct equivalent to call.release(bridge) in Capacitor iOS
+        release()
+    }
+
+    private func release() {
+        bridge?.releaseCall(withID: call.callbackId)
     }
 
     private func status(_ s: String) -> [String: Any] {

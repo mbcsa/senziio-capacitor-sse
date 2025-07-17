@@ -14,7 +14,7 @@ public class SenziioSSE: NSObject {
             connections[connectionId] = nil
         }
 
-        let connection = SenziioSSEConnection(url, maxRetryAttempts, callback)
+        let connection = SenziioSSEConnection(url, callback)
         connections[connectionId] = connection
         connection.connect()
     }
@@ -40,21 +40,17 @@ public class SenziioSSE: NSObject {
 class SenziioSSEConnection {
     private var eventSource: EventSource?
     private var lastEventId: String?
-    private var retryAttempts = 0
     
     private let url: URL
-    private let maxRetryAttempts: Int
     private let listener: EventSourceListener;
 
-    init(_ url: URL, _ maxRetryAttempts: Int, _ listener: EventSourceListener) {
+    init(_ url: URL, _ listener: EventSourceListener) {
         self.url = url
-        self.maxRetryAttempts = maxRetryAttempts
         self.listener = listener
     }
 
     func connect() {
-        retryAttempts = 0
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Double.greatestFiniteMagnitude
         configuration.timeoutIntervalForResource = Double.greatestFiniteMagnitude
         configuration.httpAdditionalHeaders = [
@@ -69,19 +65,5 @@ class SenziioSSEConnection {
 
     func disconnect() {
         eventSource?.disconnect()
-    }
-
-    private func attemptReconnection() {
-        retryAttempts += 1
-        guard retryAttempts <= maxRetryAttempts else {
-            print("⛔ Máximo de intentos de reconexión alcanzado")
-            return
-        }
-        let delay = min(pow(2.0, Double(retryAttempts)) * 1000, 30000)
-        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(Int(delay))) { [weak self] in
-            guard let self = self else { return }
-            print("♻️ Intentando reconexión #\(self.retryAttempts)...")
-            self.eventSource?.connect()
-        }
     }
 }
