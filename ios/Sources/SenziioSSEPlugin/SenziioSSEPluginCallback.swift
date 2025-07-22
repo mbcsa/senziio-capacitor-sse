@@ -1,7 +1,7 @@
 import Foundation
 import Capacitor
 
-class SenziioSSEPluginCallback : EventSourceListener {
+class SenziioSSEPluginCallback : CustomEventSourceListener {
     private let call: CAPPluginCall
     private weak var bridge: CAPBridgeProtocol?
 

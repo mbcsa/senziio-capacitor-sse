@@ -1,13 +1,13 @@
 import Foundation
 
-public protocol EventSourceListener: AnyObject {
+public protocol CustomEventSourceListener: AnyObject {
     func onOpen()
     func onEvent(type: String, data: String?)
     func onFailure(_ error: Error)
     func onClosed()
 }
 
-public final class EventSource: NSObject, URLSessionDataDelegate {
+public final class CustomEventSource: NSObject, URLSessionDataDelegate {
     private var isConnected = false
     public typealias EventHandler = () -> Void
     public typealias MessageHandler = (String?, String?, String?) -> Void
@@ -26,11 +26,11 @@ public final class EventSource: NSObject, URLSessionDataDelegate {
     
     private var heartbeatTimer: Timer?
 
-    private var listener: EventSourceListener
+    private var listener: CustomEventSourceListener
 
     private var eventListeners = [String: MessageHandler]()
     
-    public init(_ url: URL, _ listener: EventSourceListener, _ configuration: URLSessionConfiguration = .default) {
+    public init(_ url: URL, _ listener: CustomEventSourceListener, _ configuration: URLSessionConfiguration = .default) {
         self.url = url
         self.configuration = configuration
         

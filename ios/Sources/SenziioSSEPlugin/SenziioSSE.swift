@@ -1,36 +1,65 @@
 import Foundation
 import Capacitor
+import LDSwiftEventSource
+
+class SenziioEventHandler : EventHandler {
+    let wrapped: SenziioSSEPluginCallback
+
+    init(_ wrapped: SenziioSSEPluginCallback) {
+        self.wrapped = wrapped
+    }
+
+    func onOpened() {
+        wrapped.onOpen()
+    }
+
+    func onError(error: any Error) {
+        wrapped.onFailure(error)
+    }
+
+    func onMessage(eventType: String, messageEvent: MessageEvent) {
+        wrapped.onEvent(type: eventType, data: messageEvent.data)
+    }
+
+    func onClosed() {
+        wrapped.onClosed()
+    }
+
+    func onComment(comment: String) {
+        //
+    }
+}
 
 public class SenziioSSE: NSObject {
-    private var connections: [String: SenziioSSEConnection] = [:]
-    private let maxRetryAttempts = 10
+    private var eventSources: [String: EventSource] = [:]
 
     func connect(_ url: URL, _ callback: SenziioSSEPluginCallback) {
         let connectionId = callback.getId()
-
-        // Si ya existe una conexión previa, la desconectamos primero
-        if let existing = connections[connectionId] {
-            existing.disconnect()
-            connections[connectionId] = nil
+        
+        if let existing = eventSources[connectionId] {
+            existing.stop()
+            eventSources[connectionId] = nil
         }
 
-        let connection = SenziioSSEConnection(url, callback)
-        connections[connectionId] = connection
-        connection.connect()
+        let handler = SenziioEventHandler(callback)
+        let eventSource = EventSource(config: .init(handler: handler, url: url))
+        
+        eventSources[connectionId] = eventSource
+        eventSource.start()
     }
     
     func disconnect(_ connectionId: String) {
-        if let connection = connections[connectionId] {
-            connection.disconnect()
-            connections[connectionId] = nil
+        if let eventSource = eventSources[connectionId] {
+            eventSource.stop()
+            eventSources[connectionId] = nil
         }
     }
     
     deinit {
-        for (_, connection) in connections {
-            connection.disconnect()
+        for (_, eventSource) in eventSources {
+            eventSource.stop()
         }
-        connections.removeAll()
+        eventSources.removeAll()
     }
 
 }
@@ -38,13 +67,13 @@ public class SenziioSSE: NSObject {
 // MARK: - SenziioSSEConnection
 
 class SenziioSSEConnection {
-    private var eventSource: EventSource?
+    private var eventSource: CustomEventSource?
     private var lastEventId: String?
     
     private let url: URL
-    private let listener: EventSourceListener;
+    private let listener: CustomEventSourceListener;
 
-    init(_ url: URL, _ listener: EventSourceListener) {
+    init(_ url: URL, _ listener: CustomEventSourceListener) {
         self.url = url
         self.listener = listener
     }
@@ -59,7 +88,7 @@ class SenziioSSEConnection {
             "Last-Event-ID": lastEventId ?? ""
         ]
 
-        eventSource = EventSource(url, listener, configuration)
+        eventSource = CustomEventSource(url, listener, configuration)
         eventSource?.connect()
     }
 
