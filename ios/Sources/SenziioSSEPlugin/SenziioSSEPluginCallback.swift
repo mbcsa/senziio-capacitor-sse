@@ -1,7 +1,8 @@
 import Foundation
 import Capacitor
+import LDSwiftEventSource
 
-class SenziioSSEPluginCallback : CustomEventSourceListener {
+class SenziioSSEPluginCallback : EventHandler {
     private let call: CAPPluginCall
     private weak var bridge: CAPBridgeProtocol?
 
@@ -14,15 +15,15 @@ class SenziioSSEPluginCallback : CustomEventSourceListener {
         return call.callbackId
     }
 
-    func onOpen() {
+    func onOpened() {
         call.resolve(status("connected"))
     }
 
-    func onEvent(type: String, data: String?) {
-        call.resolve(message(type, data))
+    func onMessage(eventType: String, messageEvent: MessageEvent) {
+        call.resolve(message(eventType, messageEvent.data))
     }
 
-    func onFailure(_ error: Error) {
+    func onError(error: any Error) {
         call.reject(error.localizedDescription, nil, error)
         release()
     }
@@ -30,6 +31,10 @@ class SenziioSSEPluginCallback : CustomEventSourceListener {
     func onClosed() {
         call.resolve(status("disconnected"))
         release()
+    }
+
+    func onComment(comment: String) {
+        //
     }
 
     private func release() {
