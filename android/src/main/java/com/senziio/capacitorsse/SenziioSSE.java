@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import javax.net.SocketFactory;
+
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.sse.EventSource;
@@ -15,7 +17,7 @@ import okhttp3.sse.EventSources;
 
 public class SenziioSSE {
 
-    public final Map<String, EventSource> connections = new HashMap<>();
+    private final Map<String, EventSource> connections = new HashMap<>();
 
     public SenziioSSE(Context context) {
         //
@@ -46,20 +48,16 @@ public class SenziioSSE {
         }
 
         EventSource connection = connections.remove(connectionId);
-        if (connection != null) {
-            try {
-                // Método más limpio para desconectar
-                connection.cancel();
+        assert connection != null;
+        connection.cancel();
+    }
 
-                // Pequeño delay para permitir procesamiento interno
-                // pero sin bloquear el hilo principal
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    // Limpieza adicional si es necesaria
-                }, 50);
-            } catch (Exception e) {
-                // Ignorar excepciones durante cancelación
-            }
+    void cleanUp() {
+        for (EventSource source : connections.values()) {
+            source.cancel();
         }
+
+        connections.clear();
     }
 
 }

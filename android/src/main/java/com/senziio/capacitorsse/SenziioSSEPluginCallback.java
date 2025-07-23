@@ -36,37 +36,29 @@ public class SenziioSSEPluginCallback extends EventSourceListener {
 
     @Override
     public void onOpen(@NonNull EventSource eventSource, @NonNull Response response) {
-        bridge.executeOnMainThread(() -> {
-            call.resolve(status("connected"));
-        });
+        call.resolve(status("connected"));
     }
 
     @Override
     public void onEvent(@NonNull EventSource eventSource, String id, String type, @NonNull String data) {
-        bridge.executeOnMainThread(() -> {
-            call.resolve(message(type, data));
-        });
+        call.resolve(message(type, data));
     }
 
     @Override
     public void onFailure(@NonNull EventSource eventSource, Throwable t, Response response) {
         // Ignorar errores esperados durante desconexión
         if (t == null || isExpectedDisconnectError(t)) {
-            bridge.executeOnMainThread(() -> {
-                call.resolve(status("disconnected"));
-                call.release(bridge);
-            });
+            call.resolve(status("disconnected"));
+            call.release(bridge);
             return;
         }
 
         // Manejar otros errores normalmente
-        bridge.executeOnMainThread(() -> {
-            if (t instanceof Exception ex) {
-                call.reject(ex.getMessage(), ex);
-            } else {
-                call.reject("Unknown error", error(t));
-            }
-        });
+        if (t instanceof Exception ex) {
+            call.reject(ex.getMessage(), ex);
+        } else {
+            call.reject("Unknown error", error(t));
+        }
     }
 
     private boolean isExpectedDisconnectError(Throwable t) {
@@ -74,15 +66,18 @@ public class SenziioSSEPluginCallback extends EventSourceListener {
         if (t instanceof StreamResetException ex) {
             return (ex.errorCode == ErrorCode.CANCEL);
         }
+
+        if (t instanceof SocketException ex) {
+            return "Socket closed".equals(ex.getMessage());
+        }
+
         return false;
     }
 
     @Override
     public void onClosed(@NonNull EventSource eventSource) {
-        bridge.executeOnMainThread(() -> {
-            call.resolve(status("disconnected"));
-            call.release(bridge);
-        });
+        call.resolve(status("disconnected"));
+        call.release(bridge);
     }
 
     @NonNull

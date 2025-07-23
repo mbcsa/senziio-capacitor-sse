@@ -43,7 +43,7 @@ public class SenziioSSEPlugin extends Plugin {
             }
 
             sse.disconnect(connectionId);
-            // No llamar a call.resolve() aquí, dejar que el callback lo maneje
+            call.resolve();
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }
@@ -51,11 +51,7 @@ public class SenziioSSEPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        // Cancelar todas las conexiones al destruir el plugin
-        for (EventSource source : this.sse.connections.values()) {
-            source.cancel();
-        }
-        this.sse.connections.clear();
+        sse.cleanUp();
         super.handleOnDestroy();
     }
 }
