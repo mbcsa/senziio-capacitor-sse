@@ -20,7 +20,8 @@ export class SenziioSSEWeb extends WebPlugin implements SenziioSSEPlugin {
         'BeaconEvent',
         'RadarEvent',
         'StatusEvent',
-        'ConnectedEvent'
+        'ConnectedEvent',
+        'BeaconListEvent'
     ];
 
     const namedEventHandler = (event: Event) => {
